@@ -1,0 +1,6 @@
+__pycache__
+*.pyc
+
+/dist/
+/src/**/_version.py
+/logs/
