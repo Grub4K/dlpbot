@@ -12,14 +12,21 @@ import dlpbot.log
 def _main():
     parser = argparse.ArgumentParser(dlpbot.__name__)
     parser.add_argument(
+        "-V",
         "--version",
         action="version",
         version=dlpbot.__version__,
         help="discord token to use (or TOKEN env variable)",
     )
     parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="enable verbose logging",
+    )
+    parser.add_argument(
         "--token",
-        help="discord token to use (or TOKEN env variable)",
+        help="discord token to use (or TOKEN env var)",
     )
     parser.add_argument(
         "channel",
@@ -33,7 +40,7 @@ def _main():
         if not args.token:
             parser.error("neither --token nor the TOKEN env var were supplied")
 
-    dlpbot.log.setup()
+    dlpbot.log.setup(debug=args.verbose)
     client = dlpbot.client.Client(args.channel)
     asyncio.run(client.start(args.token))
 

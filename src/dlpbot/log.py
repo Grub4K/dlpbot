@@ -26,8 +26,8 @@ class PrettyFormatter(logging.Formatter):
         logging.DEBUG: "\x1b[36;1m",
         logging.INFO: "\x1b[34;1m",
         logging.WARNING: "\x1b[33;1m",
-        logging.ERROR: "\x1b[31m;1",
-        logging.CRITICAL: "\x1b[41m;1",
+        logging.ERROR: "\x1b[31;1m",
+        logging.CRITICAL: "\x1b[41;1m",
     }
 
     def __init__(
