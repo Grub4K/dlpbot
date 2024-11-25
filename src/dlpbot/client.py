@@ -1,30 +1,19 @@
 from __future__ import annotations
 
 import logging
-import re
 
 import discord
+
+import dlpbot.classifier
 
 logger = logging.getLogger(__name__)
 
 
 class Client(discord.Client):
-    def __init__(self, /, channel_ids: list[int] | None = None):
+    def __init__(self, channel_ids: list[int] | None = None, /):
         intents = discord.Intents.default()
         intents.message_content = True
 
-        self.__version_pattern = re.compile(
-            r"^\[debug\] yt-dlp version",
-            re.MULTILINE,
-        )
-        self.__config_pattern = re.compile(
-            r'^\[debug\] (?:(?:\| )*(?:[^ ]+ config|Config)(?: ".*?")?: |params: {)',
-            re.MULTILINE,
-        )
-        self.__extraction_pattern = re.compile(
-            r"^\[[^\]]+\] Extracting URL: ",
-            re.MULTILINE,
-        )
         self.__channel_ids: list[int] = channel_ids or []
         super().__init__(intents=intents)
 
@@ -39,78 +28,47 @@ class Client(discord.Client):
         if message.channel.id not in self.__channel_ids:
             pass
 
-        content = message.content
-        if message.attachments:
-            for attachment in message.attachments:
-                if self.__is_textfile(attachment):
-                    content = (await attachment.read()).decode("latin-1")
-                    break
+        classification = await dlpbot.classifier.classify_message(message)
+        if classification is dlpbot.classifier.Classification.NoLog:
+            return
 
-            else:
-                if any(map(self.__is_picture, message.attachments)):
-                    await message.reply(
-                        "found picture, please use a code block",
-                        mention_author=True,
-                        silent=True,
-                    )
-                    return
+        logger.info(f"{classification.name} sent by {message.author}")
+        if classification.has_verbose():
+            return
 
-        if self.__version_pattern.search(content):
-            if self.__config_pattern.search(content):
-                return
-            logger.info(f"{message.author}: missing config")
+        if classification.has_non_verbose():
             await message.reply(
-                "the log is incomplete please paste the **ENTIRE** log after using `-v`",
+                "found non verbose log: please use `-v`",
                 mention_author=True,
                 silent=True,
             )
             return
 
-        if not self.__extraction_pattern.search(content):
-            logger.info(f"{message.author}: no log at all")
+        if classification.has_incomplete():
+            await message.reply(
+                "found incomplete log: please paste the **ENTIRE** log after using `-v`",
+                mention_author=True,
+                silent=True,
+            )
             return
 
-        await message.reply(
-            "found a non verbose log, please use `-v`",
-            mention_author=True,
-            silent=True,
-        )
+        if classification.has_stderr():
+            await message.reply(
+                "found stderr log: please send both the stdout and stderr logs",
+                mention_author=True,
+                silent=True,
+            )
+            return
 
-    async def on_message_edit(self, before, after):
+        if classification.has_picture():
+            await message.reply(
+                "found picture log: please use a code block with `-v` instead",
+                mention_author=True,
+                silent=True,
+            )
+            return
+
+    async def on_message_edit(self, before: discord.Message, after: discord.Message, /):
+        # TODO(Grub4K): when editing the message, rejudge based on cached if they were found before?
         msg = f"{before.author} edited their message:\n{before.content} -> {after.content}"
         logger.info(msg)
-
-    def __is_textfile(self, attachment: discord.Attachment, /):
-        if (
-            attachment.flags.thumbnail
-            or attachment.flags.clip
-            or attachment.flags.remix
-        ):
-            return False
-
-        if attachment.content_type and attachment.content_type.startswith("text/"):
-            logger.info(f"attachment: text content type: {attachment}")
-            return True
-
-        return False
-
-    def __is_picture(self, attachment: discord.Attachment, /):
-        if (
-            attachment.flags.thumbnail
-            or attachment.flags.clip
-            or attachment.flags.remix
-        ):
-            return False
-
-        if attachment.content_type and attachment.content_type.startswith("image/"):
-            logger.info(f"attachment: image content type: {attachment}")
-            return True
-
-        if any(
-            attachment.filename.endswith(f".{ext}")
-            for ext in ["png", "jpg", "jpeg", "webm", "gif"]
-        ):
-            logger.info(f"attachment: image extension: {attachment}")
-            return True
-
-        return False
